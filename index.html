@@ -217,7 +217,7 @@
     <div class="app-container">
         <header class="header">
             <div class="flex justify-between items-center">
-                <h1 class="text-xl font-bold">Scan</h1>
+                <h1 class="text-xl font-bold">Scan v0.1</h1>
                 <button id="configButton" class="text-white">
                     <i class="fas fa-cog"></i>
                 </button>
@@ -456,7 +456,7 @@
             function autoSendProduct(product) {
                 let serverEndpoint = '';
                 if (!config.serverUrl || !config.endpointPath) {
-                    serverEndpoint = 'https://webhook.site/0e1e2b1e-2b2a-4c7e-8e2e-123456789abc';
+                    serverEndpoint = 'https://webhook.site/#!/view/936ce561-96d3-4348-ae30-1eaa4d462113';
                 } else {
                     serverEndpoint = config.serverUrl.replace(/\/$/, '') + '/' + config.endpointPath.replace(/^\//, '');
                 }
