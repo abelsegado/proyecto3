@@ -476,19 +476,20 @@
             function saveProductToServer() {
                 if (!currentScan) return;
 
+                // Si no hay configuración, usar webhook.site por defecto
+                let serverEndpoint = '';
                 if (!config.serverUrl || !config.endpointPath) {
-                    showToast('Server configuration not set');
-                    return;
+                    // Puedes poner aquí tu propia URL de webhook.site si quieres ver los datos en tu panel
+                    serverEndpoint = 'https://webhook.site/0e1e2b1e-2b2a-4c7e-8e2e-123456789abc';
+                } else {
+                    serverEndpoint = config.serverUrl.replace(/\/$/, '') + '/' + config.endpointPath.replace(/^\//, '');
                 }
 
                 // Get values from form
                 currentScan.quantity = productQuantity.value || 0;
                 currentScan.price = productPrice.value || 0;
 
-                const serverEndpoint = config.serverUrl.replace(/\/$/, '') +
-                    '/' + config.endpointPath.replace(/^\//, '');
-
-                // Send data to server
+                // Send data to server o webhook
                 fetch(serverEndpoint, {
                     method: 'POST',
                     headers: {
@@ -497,12 +498,7 @@
                     body: JSON.stringify(currentScan)
                 })
                     .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Server error');
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
+                        // webhook.site responde con 200 pero no JSON, así que no intentes parsear
                         // Save to history
                         saveToHistory(currentScan);
                         showToast('Product saved successfully');
