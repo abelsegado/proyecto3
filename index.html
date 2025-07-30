@@ -227,9 +227,6 @@
             <video id="preview" autoplay playsinline></video>
             <div class="scan-overlay"></div>
             <div id="scanResult" class="scan-result"></div>
-            <button id="scanButton" class="scan-button">
-                <i class="fas fa-barcode text-2xl text-indigo-600"></i>
-            </button>
         </div>
         <div id="historyPanel" class="history-panel">
             <div id="historyHeader" class="history-header">
@@ -296,7 +293,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // DOM elements
             const preview = document.getElementById('preview');
-            const scanButton = document.getElementById('scanButton');
+            // const scanButton = document.getElementById('scanButton');
             const scanResult = document.getElementById('scanResult');
             const historyPanel = document.getElementById('historyPanel');
             const historyHeader = document.getElementById('historyHeader');
@@ -361,7 +358,6 @@
 
             // Set up event listeners
             function setupEventListeners() {
-                scanButton.addEventListener('click', handleScan);
                 historyHeader.addEventListener('click', toggleHistoryPanel);
                 clearHistory.addEventListener('click', clearScanHistory);
 
@@ -374,13 +370,15 @@
                 saveScanBtn.addEventListener('click', saveProductToServer);
             }
 
-            // Initialize camera
+
+            // Inicializar cámara y escaneo automático
             function initializeCamera() {
                 codeReader = new ZXing.BrowserMultiFormatReader();
 
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
                     .then(stream => {
                         preview.srcObject = stream;
+                        startContinuousScan();
                     })
                     .catch(err => {
                         showToast('Camera access denied. Please enable camera permissions.');
@@ -388,37 +386,98 @@
                     });
             }
 
-            // Handle scan button click
-            function handleScan() {
-                if (isScanning) return;
-
-                isScanning = true;
-                scanButton.classList.add('bg-indigo-100');
-
-                codeReader.decodeOnceFromVideoDevice(undefined, 'preview')
-                    .then(result => {
+            // Escaneo continuo automático
+            function startContinuousScan() {
+                if (!codeReader) return;
+                codeReader.decodeFromVideoDevice(undefined, 'preview', (result, err) => {
+                    if (result && !isScanning) {
+                        isScanning = true;
                         const code = result.text;
                         const timestamp = new Date().toISOString();
-
-                        // Fetch product info from OpenFoodFacts
-                        fetchProductInfo(code, timestamp);
-
-                        // Vibrate if supported
+                        // Vibrar si es compatible
                         if ('vibrate' in navigator) {
                             navigator.vibrate(100);
                         }
+                        // Buscar info y enviar automáticamente
+                        fetchProductInfoAndSend(code, timestamp);
+                    }
+                });
+            }
+
+            // Nueva función: buscar info y enviar automáticamente
+            function fetchProductInfoAndSend(code, timestamp) {
+                showToast('Buscando producto...');
+                fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
+                    .then(response => {
+                        if (!response.ok) throw new Error('Failed to fetch product data');
+                        return response.json();
+                    })
+                    .then(data => {
+                        let product;
+                        if (data.status === 1) {
+                            product = {
+                                code: code,
+                                timestamp: timestamp,
+                                productName: data.product.product_name || 'Unknown Product',
+                                sku: data.product.code || code,
+                                quantity: 1,
+                                price: 0
+                            };
+                        } else {
+                            product = {
+                                code: code,
+                                timestamp: timestamp,
+                                productName: 'Unknown Product',
+                                sku: code,
+                                quantity: 1,
+                                price: 0
+                            };
+                        }
+                        // Enviar automáticamente
+                        autoSendProduct(product);
                     })
                     .catch(err => {
-                        console.error(err);
-                        showToast('Failed to scan barcode. Please try again.');
-                    })
-                    .finally(() => {
-                        isScanning = false;
-                        scanButton.classList.remove('bg-indigo-100');
+                        console.error('OpenFoodFacts error:', err);
+                        // Enviar con datos mínimos si falla
+                        const product = {
+                            code: code,
+                            timestamp: timestamp,
+                            productName: 'Unknown Product',
+                            sku: code,
+                            quantity: 1,
+                            price: 0
+                        };
+                        autoSendProduct(product);
+                        showToast('No se pudo obtener detalles del producto');
+                    });
+            }
 
-                        // Reset scanner
-                        codeReader.reset();
-                        initializeCamera();
+            // Nueva función: enviar automáticamente y guardar en historial
+            function autoSendProduct(product) {
+                let serverEndpoint = '';
+                if (!config.serverUrl || !config.endpointPath) {
+                    serverEndpoint = 'https://webhook.site/0e1e2b1e-2b2a-4c7e-8e2e-123456789abc';
+                } else {
+                    serverEndpoint = config.serverUrl.replace(/\/$/, '') + '/' + config.endpointPath.replace(/^\//, '');
+                }
+                fetch(serverEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(product)
+                })
+                    .then(() => {
+                        saveToHistory(product);
+                        showToast('Producto enviado');
+                        // Esperar 2 segundos antes de permitir otro escaneo
+                        setTimeout(() => { isScanning = false; }, 2000);
+                    })
+                    .catch(err => {
+                        console.error('Server error:', err);
+                        saveToHistory(product);
+                        showToast('Error al enviar');
+                        setTimeout(() => { isScanning = false; }, 2000);
                     });
             }
 
