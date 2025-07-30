@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scan & Store</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style id="app-style">
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            touch-action: manipulation;
+            overscroll-behavior: none;
+            background-color: #f9fafb;
+            height: 100vh;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+
+        .header {
+            background-color: #4f46e5;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            background-color: #000;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 40vh;
+            overflow: hidden;
+        }
+
+        #preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #4f46e5;
+            width: 80%;
+            height: 20%;
+            box-shadow: 0 0 0 99999px rgba(0, 0, 0, 0.5);
+            opacity: 0.7;
+        }
+
+        .scan-button {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70px;
+            height: 70px;
+            background-color: white;
+            border: 3px solid #4f46e5;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease;
+        }
+
+        .scan-button:active {
+            transform: translateX(-50%) scale(0.95);
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .scan-result {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(79, 70, 229, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        .scan-result.show {
+            opacity: 1;
+        }
+
+        .history-panel {
+            background-color: white;
+            border-top: 1px solid #e5e7eb;
+            max-height: 40vh;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .history-header {
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f3f4f6;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .history-list {
+            overflow-y: auto;
+            max-height: calc(40vh - 56px);
+            padding: 0.5rem 0;
+        }
+
+        .history-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        .collapsed {
+            max-height: 56px;
+        }
+
+        .chevron {
+            transition: transform 0.3s ease;
+        }
+
+        .collapsed .chevron {
+            transform: rotate(180deg);
+        }
+
+        @media (orientation: landscape) {
+            .app-container {
+                flex-direction: row;
+            }
+
+            .camera-container {
+                width: 60%;
+                min-height: 100vh;
+            }
+
+            .history-panel {
+                width: 40%;
+                max-height: 100vh;
+                border-top: none;
+                border-left: 1px solid #e5e7eb;
+            }
+
+            .history-list {
+                max-height: calc(100vh - 56px);
+            }
+
+            .collapsed {
+                max-height: 100vh;
+                width: 56px;
+                overflow: hidden;
+            }
+
+            .collapsed .history-header {
+                writing-mode: vertical-lr;
+                text-orientation: mixed;
+                height: 100%;
+                padding: 1rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="flex justify-between items-center">
+                <h1 class="text-xl font-bold">Scan & Store</h1>
+                <button id="configButton" class="text-white">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </header>
+        <div class="camera-container">
+            <video id="preview" autoplay playsinline></video>
+            <div class="scan-overlay"></div>
+            <div id="scanResult" class="scan-result"></div>
+            <button id="scanButton" class="scan-button">
+                <i class="fas fa-barcode text-2xl text-indigo-600"></i>
+            </button>
+        </div>
+        <div id="historyPanel" class="history-panel">
+            <div id="historyHeader" class="history-header">
+                <div class="flex items-center">
+                    <span class="font-medium">Scan History</span>
+                    <i class="fas fa-chevron-up ml-2 chevron"></i>
+                </div>
+                <button id="clearHistory" class="text-red-600">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div id="historyList" class="history-list"></div>
+        </div>
+        <div id="configModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg w-full max-w-md p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Configuration</h2>
+                    <button id="closeConfigBtn" class="text-gray-500">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Server URL</label>
+                    <input id="serverUrl" type="text" class="w-full p-2 border rounded" placeholder="https://example.com">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Endpoint Path</label>
+                    <input id="endpointPath" type="text" class="w-full p-2 border rounded" placeholder="/api/products">
+                </div>
+                <button id="saveConfigBtn" class="w-full bg-indigo-600 text-white py-2 rounded font-medium"> Save Configuration </button>
+            </div>
+        </div>
+        <div id="scanFormModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg w-full max-w-md p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Product Details</h2>
+                    <button id="closeScanFormBtn" class="text-gray-500">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                    <div id="productName" class="p-2 bg-gray-100 rounded text-gray-800"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                    <div id="productSku" class="p-2 bg-gray-100 rounded text-gray-800"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                    <input id="productQuantity" type="number" class="w-full p-2 border rounded" placeholder="Enter quantity">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Price</label>
+                    <input id="productPrice" type="number" step="0.01" class="w-full p-2 border rounded" placeholder="Enter price">
+                </div>
+                <button id="saveScanBtn" class="w-full bg-indigo-600 text-white py-2 rounded font-medium"> Save Product </button>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="toast">Message</div>
+    <script src="https://unpkg.com/@zxing/library@latest"></script>
+    <script id="app-script">
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM elements
+            const preview = document.getElementById('preview');
+            const scanButton = document.getElementById('scanButton');
+            const scanResult = document.getElementById('scanResult');
+            const historyPanel = document.getElementById('historyPanel');
+            const historyHeader = document.getElementById('historyHeader');
+            const historyList = document.getElementById('historyList');
+            const clearHistory = document.getElementById('clearHistory');
+            const toast = document.getElementById('toast');
+
+            // New DOM elements
+            const configButton = document.getElementById('configButton');
+            const configModal = document.getElementById('configModal');
+            const closeConfigBtn = document.getElementById('closeConfigBtn');
+            const saveConfigBtn = document.getElementById('saveConfigBtn');
+            const serverUrl = document.getElementById('serverUrl');
+            const endpointPath = document.getElementById('endpointPath');
+
+            const scanFormModal = document.getElementById('scanFormModal');
+            const closeScanFormBtn = document.getElementById('closeScanFormBtn');
+            const saveScanBtn = document.getElementById('saveScanBtn');
+            const productName = document.getElementById('productName');
+            const productSku = document.getElementById('productSku');
+            const productQuantity = document.getElementById('productQuantity');
+            const productPrice = document.getElementById('productPrice');
+
+            // State
+            let isScanning = false;
+            let codeReader = null;
+            let panelExpanded = true;
+            let scanHistory = [];
+            let config = {
+                serverUrl: '',
+                endpointPath: ''
+            };
+            let currentScan = null;
+
+            // Initialize the app
+            function init() {
+                loadScanHistory();
+                loadConfig();
+                renderHistoryList();
+                setupEventListeners();
+                initializeCamera();
+            }
+
+            // Load configuration from localStorage
+            function loadConfig() {
+                const storedConfig = localStorage.getItem('scanConfig');
+                if (storedConfig) {
+                    config = JSON.parse(storedConfig);
+                    serverUrl.value = config.serverUrl;
+                    endpointPath.value = config.endpointPath;
+                }
+            }
+
+            // Save configuration to localStorage
+            function saveConfig() {
+                config.serverUrl = serverUrl.value.trim();
+                config.endpointPath = endpointPath.value.trim();
+                localStorage.setItem('scanConfig', JSON.stringify(config));
+                showToast('Configuration saved');
+                configModal.classList.add('hidden');
+            }
+
+            // Set up event listeners
+            function setupEventListeners() {
+                scanButton.addEventListener('click', handleScan);
+                historyHeader.addEventListener('click', toggleHistoryPanel);
+                clearHistory.addEventListener('click', clearScanHistory);
+
+                // New event listeners
+                configButton.addEventListener('click', () => configModal.classList.remove('hidden'));
+                closeConfigBtn.addEventListener('click', () => configModal.classList.add('hidden'));
+                saveConfigBtn.addEventListener('click', saveConfig);
+
+                closeScanFormBtn.addEventListener('click', () => scanFormModal.classList.add('hidden'));
+                saveScanBtn.addEventListener('click', saveProductToServer);
+            }
+
+            // Initialize camera
+            function initializeCamera() {
+                codeReader = new ZXing.BrowserMultiFormatReader();
+
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                    .then(stream => {
+                        preview.srcObject = stream;
+                    })
+                    .catch(err => {
+                        showToast('Camera access denied. Please enable camera permissions.');
+                        console.error('Error accessing camera:', err);
+                    });
+            }
+
+            // Handle scan button click
+            function handleScan() {
+                if (isScanning) return;
+
+                isScanning = true;
+                scanButton.classList.add('bg-indigo-100');
+
+                codeReader.decodeOnceFromVideoDevice(undefined, 'preview')
+                    .then(result => {
+                        const code = result.text;
+                        const timestamp = new Date().toISOString();
+
+                        // Fetch product info from OpenFoodFacts
+                        fetchProductInfo(code, timestamp);
+
+                        // Vibrate if supported
+                        if ('vibrate' in navigator) {
+                            navigator.vibrate(100);
+                        }
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        showToast('Failed to scan barcode. Please try again.');
+                    })
+                    .finally(() => {
+                        isScanning = false;
+                        scanButton.classList.remove('bg-indigo-100');
+
+                        // Reset scanner
+                        codeReader.reset();
+                        initializeCamera();
+                    });
+            }
+
+            // New function: Fetch product info from OpenFoodFacts
+            function fetchProductInfo(code, timestamp) {
+                showToast('Fetching product info...');
+
+                fetch(`https://world.openfoodfacts.org/api/v0/product/${code}.json`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Failed to fetch product data');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 1) {
+                            // Product found
+                            const product = data.product;
+                            currentScan = {
+                                code: code,
+                                timestamp: timestamp,
+                                productName: product.product_name || 'Unknown Product',
+                                sku: product.code || code
+                            };
+
+                            // Show product form
+                            showProductForm(currentScan);
+                        } else {
+                            throw new Error('Product not found');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('OpenFoodFacts error:', err);
+                        // Save minimal info if API fails
+                        currentScan = {
+                            code: code,
+                            timestamp: timestamp,
+                            productName: 'Unknown Product',
+                            sku: code
+                        };
+                        showProductForm(currentScan);
+                        showToast('Could not fetch product details');
+                    });
+            }
+
+            // New function: Show product form
+            function showProductForm(product) {
+                productName.textContent = product.productName;
+                productSku.textContent = product.sku;
+                productQuantity.value = '';
+                productPrice.value = '';
+
+                // Display the form modal
+                scanFormModal.classList.remove('hidden');
+            }
+
+            // New function: Save product to server
+            function saveProductToServer() {
+                if (!currentScan) return;
+
+                if (!config.serverUrl || !config.endpointPath) {
+                    showToast('Server configuration not set');
+                    return;
+                }
+
+                // Get values from form
+                currentScan.quantity = productQuantity.value || 0;
+                currentScan.price = productPrice.value || 0;
+
+                const serverEndpoint = config.serverUrl.replace(/\/$/, '') +
+                    '/' + config.endpointPath.replace(/^\//, '');
+
+                // Send data to server
+                fetch(serverEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(currentScan)
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Server error');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Save to history
+                        saveToHistory(currentScan);
+                        showToast('Product saved successfully');
+                        scanFormModal.classList.add('hidden');
+                    })
+                    .catch(err => {
+                        console.error('Server error:', err);
+                        showToast('Failed to save to server');
+
+                        // Save to history anyway
+                        saveToHistory(currentScan);
+                        scanFormModal.classList.add('hidden');
+                    });
+            }
+
+            // Update saveToHistory function to handle new data structure
+            function saveToHistory(product) {
+                scanHistory.unshift(product);
+                localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
+                renderHistoryList();
+            }
+
+            // Update renderHistoryList to display new product info
+            function renderHistoryList() {
+                historyList.innerHTML = '';
+
+                if (scanHistory.length === 0) {
+                    const emptyMessage = document.createElement('div');
+                    emptyMessage.className = 'text-center py-4 text-gray-500';
+                    emptyMessage.textContent = 'No scan history';
+                    historyList.appendChild(emptyMessage);
+                    return;
+                }
+
+                scanHistory.forEach((item, index) => {
+                    const listItem = document.createElement('div');
+                    listItem.className = 'history-item';
+
+                    const details = document.createElement('div');
+
+                    const name = document.createElement('div');
+                    name.className = 'font-medium text-gray-800';
+                    name.textContent = item.productName || item.code;
+
+                    const info = document.createElement('div');
+                    info.className = 'text-sm text-gray-600';
+
+                    if (item.quantity || item.price) {
+                        const qtyPrice = [];
+                        if (item.quantity) qtyPrice.push(`Qty: ${item.quantity}`);
+                        if (item.price) qtyPrice.push(`$${item.price}`);
+                        info.textContent = qtyPrice.join(' - ');
+                    } else {
+                        info.textContent = item.sku || item.code;
+                    }
+
+                    const time = document.createElement('div');
+                    time.className = 'text-xs text-gray-500';
+                    time.textContent = formatDate(item.timestamp);
+
+                    details.appendChild(name);
+                    details.appendChild(info);
+                    details.appendChild(time);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.className = 'text-red-500 ml-2';
+                    deleteButton.innerHTML = '<i class="fas fa-times"></i>';
+                    deleteButton.addEventListener('click', () => deleteHistoryItem(index));
+
+                    listItem.appendChild(details);
+                    listItem.appendChild(deleteButton);
+                    historyList.appendChild(listItem);
+                });
+            }
+
+            // Display scan result
+            function displayScanResult(code) {
+                scanResult.textContent = `Código: ${code}`;
+                scanResult.classList.add('show');
+
+                setTimeout(() => {
+                    scanResult.classList.remove('show');
+                }, 3000);
+            }
+
+            // Save scan to history
+            function saveToHistory(product) {
+                scanHistory.unshift(product);
+                localStorage.setItem('scanHistory', JSON.stringify(scanHistory));
+                renderHistoryList();
+            }
+
+            // Load scan history from localStorage
+            function loadScanHistory() {
+                const storedHistory = localStorage.getItem('scanHistory');
+                if (storedHistory) {
+                    scanHistory = JSON.parse(storedHistory);
+                }
+            }
+
+            // Clear scan history
+            function clearScanHistory(e) {
+                e.stopPropagation();
+                scanHistory = [];
+                localStorage.removeItem('scanHistory');
+                renderHistoryList();
+                showToast('History cleared');
+            }
+
+            // Toggle history panel
+            function toggleHistoryPanel() {
+                panelExpanded = !panelExpanded;
+
+                if (panelExpanded) {
+                    historyPanel.classList.remove('collapsed');
+                } else {
+                    historyPanel.classList.add('collapsed');
+                }
+            }
+
+            // Format date for display
+            function formatDate(dateString) {
+                const date = new Date(dateString);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            // Show toast message
+            function showToast(message) {
+                toast.textContent = message;
+                toast.classList.add('show');
+
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }
+
+            // Initialize the app
+            init();
+        });
+    </script>
+</body>
+
+</html>
